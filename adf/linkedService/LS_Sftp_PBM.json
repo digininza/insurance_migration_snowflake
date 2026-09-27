@@ -1,0 +1,27 @@
+{
+    "name": "LS_Sftp_PBM",
+    "properties": {
+        "type": "Sftp",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "PBM partner SFTP drop (pharmacy claims). SSH key auth; key in Key Vault.",
+        "typeProperties": {
+            "host": "sftp.pbm-partner.example",
+            "port": 22,
+            "authenticationType": "SshPublicKey",
+            "userName": "carevista_rx",
+            "privateKeyContent": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "sftp-pbm-private-key"
+            },
+            "skipHostKeyValidation": false,
+            "hostKeyFingerprint": "ssh-rsa 2048 <fingerprint-placeholder>"
+        }
+    }
+}

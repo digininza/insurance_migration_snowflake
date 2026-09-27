@@ -1,0 +1,33 @@
+{
+    "name": "TR_Daily_0130_ET",
+    "properties": {
+        "type": "ScheduleTrigger",
+        "runtimeState": "Started",
+        "description": "Nightly incremental after source batch cycles complete (extract window 02:00-04:30 on read replicas).",
+        "pipelines": [
+            {
+                "pipelineReference": {
+                    "referenceName": "PL_00_Master_Orchestrator",
+                    "type": "PipelineReference"
+                },
+                "parameters": {}
+            }
+        ],
+        "typeProperties": {
+            "recurrence": {
+                "frequency": "Day",
+                "interval": 1,
+                "startTime": "2026-06-14T01:30:00",
+                "timeZone": "Eastern Standard Time",
+                "schedule": {
+                    "hours": [
+                        1
+                    ],
+                    "minutes": [
+                        30
+                    ]
+                }
+            }
+        }
+    }
+}

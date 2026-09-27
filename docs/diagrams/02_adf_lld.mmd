@@ -1,0 +1,24 @@
+%% ADF pipeline graph
+flowchart TD
+  T1[tr_daily_0130 schedule] --> M[PL_00_Master_Orchestrator]
+  T2[tr_claims_hourly tumbling window] --> R
+  M --> L0[Lookup ctl.source_system active]
+  L0 --> FE1{{ForEach system batch=4}}
+  FE1 --> R[PL_10_Incremental_By_System]
+  R --> L1[Lookup usp_get_objects] --> FE2{{ForEach object batch=8-16}}
+  FE2 --> C[PL_11_Copy_Object_Incremental]
+  subgraph C_[PL_11 detail]
+    C1[SP usp_log_run_start] --> C2[Lookup old watermark] --> C3[Lookup new watermark at source]
+    C3 --> C4[Copy: source query wm range -> ADLS Parquet]
+    C4 -->|success| C5[SP usp_update_watermark] --> C6[SP usp_log_run_end OK]
+    C4 -->|failure| C7[SP usp_log_run_end FAILED] --> C8[PL_90_Send_Alert]
+  end
+  C --> C_
+  M --> F[PL_12_File_Ingest_SFTP<br/>GetMetadata -> trailer check -> binary copy]
+  M --> P[PL_30_Snowflake_Post_Load<br/>Until publish gate PASSED]
+  P --> RC[PL_40_Reconciliation<br/>Script CALL SP_RUN_RECON]
+  RC -->|critical breaks| AL[PL_90_Send_Alert -> Logic App -> Teams/ServiceNow]
+  T3[tr_backfill manual] --> B[PL_20_Historical_Backfill]
+  B --> BL[Lookup PENDING/FAILED partitions] --> FE3{{ForEach partition batch=12}}
+  FE3 --> B1[Copy DynamicRange partition -> raw/backfill] --> B2[SP usp_mark_partition DONE]
+  B --> B3[Script: CALL SP_BACKFILL_COPY on WH_BACKFILL] --> B4[Script: EXECUTE TASK T_ROOT_BACKFILL]

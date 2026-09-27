@@ -1,0 +1,54 @@
+workflow,folder,mapping,source_type,target,complexity,target_read_last_12m,decision,wave,target_pattern
+wf_CLA_01,CLAIMS,m_CLA_LOAD_01,SQL Server,EDW.CLA_01,Simple,Y,MIGRATE,W3,ADF metadata row + RAW/STAGE view
+wf_CLA_02,CLAIMS,m_CLA_COPY_02,SQL Server,EDW.CLA_02,n/a,N,RETIRE,-,-
+wf_CLA_03,CLAIMS,m_CLA_AGG_03,SQL Server,EDW.CLA_03,n/a,N,RETIRE,-,-
+wf_CLA_04,CLAIMS,m_CLA_SCD2_04,SQL Server,EDW.CLA_04,n/a,N,RETIRE,-,-
+wf_CLA_05,CLAIMS,m_CLA_XREF_05,SQL Server,EDW.CLA_05,Medium,Y,MIGRATE,W3,Stored procedure / Dynamic Table
+wf_CLA_06,CLAIMS,m_CLA_EXTRACT_06,SQL Server,EDW.CLA_06,Simple,Y,MIGRATE,W3,ADF metadata row + RAW/STAGE view
+wf_CLA_07,CLAIMS,m_CLA_LOAD_07,SQL Server,EDW.CLA_07,Simple,Y,MIGRATE,W3,ADF metadata row + RAW/STAGE view
+wf_MEM_01,MEMBERSHIP,m_MEM_LOAD_01,Oracle,EDW.MEM_01,n/a,N,RETIRE,-,-
+wf_MEM_02,MEMBERSHIP,m_MEM_COPY_02,Oracle,EDW.MEM_02,n/a,N,RETIRE,-,-
+wf_MEM_03,MEMBERSHIP,m_MEM_AGG_03,Oracle,EDW.MEM_03,Simple,Y,MIGRATE,W2,ADF metadata row + RAW/STAGE view
+wf_MEM_04,MEMBERSHIP,m_MEM_SCD2_04,Oracle,EDW.MEM_04,Medium,Y,MIGRATE,W2,Stored procedure / Dynamic Table
+wf_MEM_05,MEMBERSHIP,m_MEM_XREF_05,Oracle,EDW.MEM_05,Medium,Y,MIGRATE,W2,Stored procedure / Dynamic Table
+wf_MEM_06,MEMBERSHIP,m_MEM_EXTRACT_06,Oracle,EDW.MEM_06,Simple,Y,MIGRATE,W2,ADF metadata row + RAW/STAGE view
+wf_MEM_07,MEMBERSHIP,m_MEM_LOAD_07,Oracle,EDW.MEM_07,Simple,Y,MIGRATE,W2,ADF metadata row + RAW/STAGE view
+wf_MEM_08,MEMBERSHIP,m_MEM_COPY_08,Oracle,EDW.MEM_08,Simple,Y,MIGRATE,W2,ADF metadata row + RAW/STAGE view
+wf_MEM_09,MEMBERSHIP,m_MEM_AGG_09,Oracle,EDW.MEM_09,Simple,Y,MIGRATE,W2,ADF metadata row + RAW/STAGE view
+wf_PRO_01,PROVIDER,m_PRO_LOAD_01,SQL Server,EDW.PRO_01,Simple,Y,MIGRATE,W1,ADF metadata row + RAW/STAGE view
+wf_PRO_02,PROVIDER,m_PRO_COPY_02,SQL Server,EDW.PRO_02,Complex,Y,MIGRATE,W1,Redesigned set-based SQL + extra recon rules
+wf_PRO_03,PROVIDER,m_PRO_AGG_03,SQL Server,EDW.PRO_03,Medium,Y,MIGRATE,W1,Stored procedure / Dynamic Table
+wf_PRO_04,PROVIDER,m_PRO_SCD2_04,SQL Server,EDW.PRO_04,Simple,Y,MIGRATE,W1,ADF metadata row + RAW/STAGE view
+wf_PRO_05,PROVIDER,m_PRO_XREF_05,SQL Server,EDW.PRO_05,Medium,Y,MIGRATE,W1,Stored procedure / Dynamic Table
+wf_PRO_06,PROVIDER,m_PRO_EXTRACT_06,SQL Server,EDW.PRO_06,n/a,N,RETIRE,-,-
+wf_PRO_07,PROVIDER,m_PRO_LOAD_07,SQL Server,EDW.PRO_07,Simple,Y,MIGRATE,W1,ADF metadata row + RAW/STAGE view
+wf_PRO_08,PROVIDER,m_PRO_COPY_08,SQL Server,EDW.PRO_08,Medium,Y,MIGRATE,W1,Stored procedure / Dynamic Table
+wf_PRO_09,PROVIDER,m_PRO_AGG_09,SQL Server,EDW.PRO_09,Simple,Y,MIGRATE,W1,ADF metadata row + RAW/STAGE view
+wf_BIL_01,BILLING,m_BIL_LOAD_01,Oracle,EDW.BIL_01,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_BIL_02,BILLING,m_BIL_COPY_02,Oracle,EDW.BIL_02,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_BIL_03,BILLING,m_BIL_AGG_03,Oracle,EDW.BIL_03,n/a,N,RETIRE,-,-
+wf_BIL_04,BILLING,m_BIL_SCD2_04,Oracle,EDW.BIL_04,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_BIL_05,BILLING,m_BIL_XREF_05,Oracle,EDW.BIL_05,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_BIL_06,BILLING,m_BIL_EXTRACT_06,Oracle,EDW.BIL_06,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_BIL_07,BILLING,m_BIL_LOAD_07,Oracle,EDW.BIL_07,n/a,N,RETIRE,-,-
+wf_BIL_08,BILLING,m_BIL_COPY_08,Oracle,EDW.BIL_08,Medium,Y,MIGRATE,W4,Stored procedure / Dynamic Table
+wf_PHA_01,PHARMACY,m_PHA_LOAD_01,Flat File,EDW.PHA_01,Simple,Y,MIGRATE,W5,ADF metadata row + RAW/STAGE view
+wf_PHA_02,PHARMACY,m_PHA_COPY_02,Flat File,EDW.PHA_02,n/a,N,RETIRE,-,-
+wf_PHA_03,PHARMACY,m_PHA_AGG_03,Flat File,EDW.PHA_03,n/a,N,RETIRE,-,-
+wf_PHA_04,PHARMACY,m_PHA_SCD2_04,Flat File,EDW.PHA_04,Medium,Y,MIGRATE,W5,Stored procedure / Dynamic Table
+wf_PHA_05,PHARMACY,m_PHA_XREF_05,Flat File,EDW.PHA_05,Simple,Y,MIGRATE,W5,ADF metadata row + RAW/STAGE view
+wf_PHA_06,PHARMACY,m_PHA_EXTRACT_06,Flat File,EDW.PHA_06,Simple,Y,MIGRATE,W5,ADF metadata row + RAW/STAGE view
+wf_PHA_07,PHARMACY,m_PHA_LOAD_07,Flat File,EDW.PHA_07,Medium,Y,MIGRATE,W5,Stored procedure / Dynamic Table
+wf_REF_01,REFERENCE,m_REF_LOAD_01,Flat File,EDW.REF_01,Simple,Y,MIGRATE,W1,ADF metadata row + RAW/STAGE view
+wf_REF_02,REFERENCE,m_REF_COPY_02,Flat File,EDW.REF_02,Medium,Y,MIGRATE,W1,Stored procedure / Dynamic Table
+wf_REF_03,REFERENCE,m_REF_AGG_03,Flat File,EDW.REF_03,n/a,N,RETIRE,-,-
+wf_REF_04,REFERENCE,m_REF_SCD2_04,Flat File,EDW.REF_04,Complex,Y,MIGRATE,W1,Redesigned set-based SQL + extra recon rules
+wf_REF_05,REFERENCE,m_REF_XREF_05,Flat File,EDW.REF_05,Medium,Y,MIGRATE,W1,Stored procedure / Dynamic Table
+wf_FIN_01,FINANCE_AGG,m_FIN_LOAD_01,Oracle EDW,EDW.FIN_01,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_FIN_02,FINANCE_AGG,m_FIN_COPY_02,Oracle EDW,EDW.FIN_02,Complex,Y,MIGRATE,W4,Redesigned set-based SQL + extra recon rules
+wf_FIN_03,FINANCE_AGG,m_FIN_AGG_03,Oracle EDW,EDW.FIN_03,Medium,Y,MIGRATE,W4,Stored procedure / Dynamic Table
+wf_FIN_04,FINANCE_AGG,m_FIN_SCD2_04,Oracle EDW,EDW.FIN_04,n/a,N,RETIRE,-,-
+wf_FIN_05,FINANCE_AGG,m_FIN_XREF_05,Oracle EDW,EDW.FIN_05,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_FIN_06,FINANCE_AGG,m_FIN_EXTRACT_06,Oracle EDW,EDW.FIN_06,n/a,N,RETIRE,-,-
+wf_FIN_07,FINANCE_AGG,m_FIN_LOAD_07,Oracle EDW,EDW.FIN_07,Simple,Y,MIGRATE,W4,ADF metadata row + RAW/STAGE view
+wf_FIN_08,FINANCE_AGG,m_FIN_COPY_08,Oracle EDW,EDW.FIN_08,n/a,N,RETIRE,-,-

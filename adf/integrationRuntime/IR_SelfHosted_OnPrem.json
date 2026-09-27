@@ -1,0 +1,7 @@
+{
+    "name": "IR_SelfHosted_OnPrem",
+    "properties": {
+        "type": "SelfHosted",
+        "description": "On-prem SHIR: 2 nodes HA (4 during backfill). Reaches SQL Server/Oracle over the DC network; outbound 443 only to Azure over ExpressRoute."
+    }
+}

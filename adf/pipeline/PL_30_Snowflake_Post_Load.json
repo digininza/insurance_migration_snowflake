@@ -1,0 +1,97 @@
+{
+    "name": "PL_30_Snowflake_Post_Load",
+    "properties": {
+        "description": "Polls CTL_PUBLISH_STATUS until the Snowflake publish gate PASSES for the business date (Snowflake tasks own transformation; ADF only waits). Times out at the SLA.",
+        "parameters": {
+            "business_date": {
+                "type": "string"
+            }
+        },
+        "variables": {
+            "v_gate": {
+                "type": "String",
+                "defaultValue": "PENDING"
+            }
+        },
+        "activities": [
+            {
+                "name": "Until_Gate_Passed",
+                "type": "Until",
+                "typeProperties": {
+                    "expression": {
+                        "value": "@equals(variables('v_gate'), 'PASSED')",
+                        "type": "Expression"
+                    },
+                    "timeout": "0.03:30:00",
+                    "activities": [
+                        {
+                            "name": "Read_Gate",
+                            "type": "Lookup",
+                            "policy": {
+                                "timeout": "0.00:30:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "SnowflakeV2Source",
+                                    "query": {
+                                        "value": "@concat('SELECT COALESCE(MAX(GATE_STATUS),''PENDING'') AS GATE FROM CV_PROD_CONTROL.CONTROL.CTL_PUBLISH_STATUS WHERE BUSINESS_DATE = ''', pipeline().parameters.business_date, '''')",
+                                        "type": "Expression"
+                                    },
+                                    "exportSettings": {
+                                        "type": "SnowflakeExportCopyCommand"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_Snowflake_Generic",
+                                    "type": "DatasetReference"
+                                },
+                                "firstRowOnly": true
+                            }
+                        },
+                        {
+                            "name": "Set_Gate",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Read_Gate",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "typeProperties": {
+                                "variableName": "v_gate",
+                                "value": {
+                                    "value": "@activity('Read_Gate').output.firstRow.GATE",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Wait_5_Min",
+                            "type": "Wait",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set_Gate",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "typeProperties": {
+                                "waitTimeInSeconds": 300
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "folder": {
+            "name": "30_post_load"
+        }
+    }
+}

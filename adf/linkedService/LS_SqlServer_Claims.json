@@ -1,0 +1,28 @@
+{
+    "name": "LS_SqlServer_Claims",
+    "properties": {
+        "type": "SqlServer",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Claims admin system (AG readable secondary for extracts)",
+        "typeProperties": {
+            "server": "clmsql-ag-listener.carevista.local",
+            "database": "CLAIMS_PROD",
+            "encrypt": "mandatory",
+            "trustServerCertificate": false,
+            "authenticationType": "SQL",
+            "userName": "svc_adf_reader",
+            "password": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "sqlsrv-claims-svc-adf-pwd"
+            },
+            "applicationIntent": "ReadOnly"
+        }
+    }
+}

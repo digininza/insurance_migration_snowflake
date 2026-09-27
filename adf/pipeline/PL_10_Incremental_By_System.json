@@ -1,0 +1,94 @@
+{
+    "name": "PL_10_Incremental_By_System",
+    "properties": {
+        "description": "All active INCREMENTAL objects of one source system, in priority order, copied in parallel.",
+        "parameters": {
+            "system_code": {
+                "type": "string"
+            },
+            "business_date": {
+                "type": "string"
+            },
+            "batch_count": {
+                "type": "int",
+                "defaultValue": 8
+            }
+        },
+        "activities": [
+            {
+                "name": "Lookup_Objects",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": {
+                            "value": "@concat('EXEC ctl.usp_get_objects @system_code = ''', pipeline().parameters.system_code, ''', @load_type = ''INCREMENTAL''')",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach_Object",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Lookup_Objects",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Lookup_Objects').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 12,
+                    "activities": [
+                        {
+                            "name": "Copy_Object",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_11_Copy_Object_Incremental",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "object": {
+                                        "value": "@item()",
+                                        "type": "Expression"
+                                    },
+                                    "business_date": {
+                                        "value": "@pipeline().parameters.business_date",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "folder": {
+            "name": "10_incremental"
+        }
+    }
+}

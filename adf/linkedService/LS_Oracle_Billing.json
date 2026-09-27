@@ -1,0 +1,27 @@
+{
+    "name": "LS_Oracle_Billing",
+    "properties": {
+        "type": "Oracle",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Premium billing (Oracle)",
+        "typeProperties": {
+            "server": "billora-scan.carevista.local",
+            "port": 1521,
+            "serviceName": "BILLPRD",
+            "authenticationType": "Basic",
+            "username": "SVC_ADF_READER",
+            "password": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "oracle-billing-svc-adf-pwd"
+            },
+            "encryptionClient": "required"
+        }
+    }
+}

@@ -1,0 +1,29 @@
+%% Snowflake object flow
+flowchart LR
+  subgraph ING[Ingestion]
+    SI[Storage integration SI_CV_ADLS] --> STGX[External stage STG_ADLS_RAW]
+    NI[Notification integration NI_CV_ADLS_EVENTS] --> PIPES[Pipes PIPE_*]
+    STGX --> PIPES
+    STGX --> BFC[SP_BACKFILL_COPY]
+  end
+  PIPES --> RAW[(RAW.* tables<br/>+ _FILE_NAME _LOAD_TS)]
+  BFC --> RAW
+  RAW --> S1[/STRM_*_STAGE append-only/]
+  S1 --> T1[T_STAGE_* tasks<br/>SP_STAGE_*]
+  T1 --> STG[(STAGE.*)]
+  T1 --> QUA[(QUARANTINE.*)]
+  STG --> T2[T_CORE_DIM_* SCD2<br/>SP_MERGE_DIM_*]
+  T2 --> DIM[(CORE dims)]
+  STG --> T3[T_CORE_FACT_* AFTER dims<br/>SP_MERGE_FACT_*]
+  DIM --> T3
+  T3 --> FACT[(CORE facts)]
+  T3 --> T4[T_DQ_AND_PUBLISH_GATE]
+  T4 --> FS[(CTL_FEED_STATUS)]
+  FACT --> DT1[DT_MEMBER_MONTHS DOWNSTREAM]
+  DT1 --> DT2[DT_PMPM_BY_LOB_MONTH 1h]
+  FACT --> DT3[DT_CLAIMS_LAG_TRIANGLE 6h]
+  FACT --> DT4[DT_PROVIDER_SCORECARD 1d]
+  FACT --> DT5[DT_DENIAL_RATE_DAILY 1h]
+  DT2 --> SV[Secure views + LEGACY_COMPAT]
+  FIN[T_FINALIZER_AUDIT] --> AUD[(AUDIT_LOG)]
+  AL[Snowflake Alerts] -.watch.-> PIPES & T1 & DT2

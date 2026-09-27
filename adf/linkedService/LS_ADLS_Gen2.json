@@ -1,0 +1,14 @@
+{
+    "name": "LS_ADLS_Gen2",
+    "properties": {
+        "type": "AzureBlobFS",
+        "connectVia": {
+            "referenceName": "IR_Azure_ManagedVNet",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Landing lake. Auth = ADF system-assigned managed identity (no account keys, no SAS).",
+        "typeProperties": {
+            "url": "https://stcvlakeprod.dfs.core.windows.net/"
+        }
+    }
+}

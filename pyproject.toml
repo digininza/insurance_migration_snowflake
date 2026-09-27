@@ -1,0 +1,17 @@
+[project]
+name = "insurance-migration-snowflake"
+version = "1.0.0"
+description = "CareVista Health: Informatica PowerCenter → ADF + ADLS + Snowflake migration reference implementation"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 145
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["UP007"]

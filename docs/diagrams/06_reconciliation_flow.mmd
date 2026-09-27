@@ -1,0 +1,16 @@
+flowchart TD
+  A[Business date D closes] --> B[Legacy EDW nightly - PowerCenter]
+  A --> C[New platform - ADF + Snowflake]
+  B --> D[PL_41 legacy recon extract<br/>aggregates + key hashes]
+  D --> E[(CONTROL.RECON.LEGACY_*)]
+  C --> F[(CORE / MART)]
+  E & F --> G[SP_RUN_RECON D]
+  G --> L1[L1 counts] & L2[L2 amounts] & L3[L3 key hash] & L4[L4 types] & L5[L5 rules] & L6[L6 KPIs]
+  L1 & L2 & L3 & L4 & L5 & L6 --> H[(RECON_RESULT / RECON_BREAK)]
+  H --> I{Critical breaks?}
+  I -->|yes| J[Alert + block publish + triage]
+  J --> K{Disposition}
+  K --> K1[FIXED] & K2[LEGACY_DEFECT signed off] & K3[TIMING]
+  I -->|no| M[Green day counter +1]
+  M --> N{10 green days + 3 clean month-ends?}
+  N -->|yes| O[Cutover Go]

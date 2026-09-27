@@ -1,0 +1,21 @@
+flowchart LR
+  subgraph OnPrem
+    DB[(SQL Server / Oracle)] --- SHIR[SHIR HA]
+  end
+  SHIR -- ExpressRoute 443 --> ADF
+  subgraph Azure
+    ADF[ADF + Managed VNet IR] -- MI + PE --> ADLS[(ADLS public off)]
+    ADF -- MI + PE --> KV[[Key Vault HSM]]
+    ADF -- key-pair from KV + Private Link --> SF
+    ENTRA[Entra ID SSO + SCIM] --> SF
+    SENT[Sentinel SIEM] 
+  end
+  subgraph SF[Snowflake Business Critical]
+    NP[Network policy private only]
+    TAG[PHI_CLASS tag -> masking]
+    RAP[Row access by LOB]
+    TSS[Tri-Secret Secure]
+  end
+  KV -. CMK .-> TSS
+  SF -- storage integration --> ADLS
+  SF -- ACCESS_HISTORY / LOGIN_HISTORY --> SENT

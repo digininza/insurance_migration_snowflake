@@ -1,0 +1,35 @@
+{
+    "name": "LS_Snowflake",
+    "properties": {
+        "type": "SnowflakeV2",
+        "connectVia": {
+            "referenceName": "IR_Azure_ManagedVNet",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Snowflake over Private Link; key-pair auth for SVC_PROD_ADF_LOADER; private key + passphrase in Key Vault.",
+        "typeProperties": {
+            "accountIdentifier": "carevista-prod.privatelink",
+            "database": "CV_PROD_CONTROL",
+            "warehouse": "PROD_WH_INGEST",
+            "role": "PROD_SR_INGEST",
+            "authenticationType": "KeyPair",
+            "user": "SVC_PROD_ADF_LOADER",
+            "privateKey": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "snowflake-adf-loader-private-key"
+            },
+            "privateKeyPassphrase": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "snowflake-adf-loader-pk-passphrase"
+            }
+        }
+    }
+}

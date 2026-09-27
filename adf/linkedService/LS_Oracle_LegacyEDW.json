@@ -1,0 +1,27 @@
+{
+    "name": "LS_Oracle_LegacyEDW",
+    "properties": {
+        "type": "Oracle",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "LEGACY Oracle EDW — used only for reconciliation extracts during parallel run",
+        "typeProperties": {
+            "server": "edwora-scan.carevista.local",
+            "port": 1521,
+            "serviceName": "EDWPRD",
+            "authenticationType": "Basic",
+            "username": "SVC_ADF_READER",
+            "password": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "oracle-edw-recon-pwd"
+            },
+            "encryptionClient": "required"
+        }
+    }
+}

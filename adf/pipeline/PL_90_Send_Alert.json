@@ -1,0 +1,78 @@
+{
+    "name": "PL_90_Send_Alert",
+    "properties": {
+        "description": "Posts to the alerting Logic App (Teams channel + email + ServiceNow incident for High). URL read from Key Vault at runtime.",
+        "parameters": {
+            "severity": {
+                "type": "string",
+                "defaultValue": "Medium"
+            },
+            "pipeline_name": {
+                "type": "string"
+            },
+            "run_id": {
+                "type": "string"
+            },
+            "message": {
+                "type": "string"
+            }
+        },
+        "activities": [
+            {
+                "name": "Get_LogicApp_Url",
+                "type": "WebActivity",
+                "policy": {
+                    "timeout": "0.00:30:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": true,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "method": "GET",
+                    "url": "https://kv-cv-data-prod.vault.azure.net/secrets/logicapp-alert-url?api-version=7.4",
+                    "authentication": {
+                        "type": "MSI",
+                        "resource": "https://vault.azure.net"
+                    }
+                }
+            },
+            {
+                "name": "Post_Alert",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "Get_LogicApp_Url",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:30:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": true
+                },
+                "typeProperties": {
+                    "method": "POST",
+                    "url": {
+                        "value": "@activity('Get_LogicApp_Url').output.value",
+                        "type": "Expression"
+                    },
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": {
+                        "value": "@json(concat('{\"severity\":\"', pipeline().parameters.severity, '\",\"factory\":\"', pipeline().DataFactory, '\",\"pipeline\":\"', pipeline().parameters.pipeline_name, '\",\"run_id\":\"', pipeline().parameters.run_id, '\",\"message\":\"', replace(pipeline().parameters.message,'\"',''''), '\"}'))",
+                        "type": "Expression"
+                    }
+                }
+            }
+        ],
+        "folder": {
+            "name": "90_common"
+        }
+    }
+}

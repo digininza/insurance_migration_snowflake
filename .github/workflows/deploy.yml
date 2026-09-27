@@ -1,0 +1,87 @@
+name: deploy
+# DEV on merge to main; QA and PROD are manual with GitHub Environment approvals.
+on:
+  push:
+    branches: [main]
+    paths: ["snowflake/**", "adf/**", "metadata/**"]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Target environment"
+        type: choice
+        options: [DEV, QA, PROD]
+        default: QA
+
+permissions:
+  id-token: write      # OIDC to Azure (no stored Azure secrets)
+  contents: read
+
+jobs:
+  snowflake:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env || 'DEV' }}
+    env:
+      ENV: ${{ github.event.inputs.env || 'DEV' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Fetch Snowflake deploy key from Key Vault
+        run: |
+          az keyvault secret show --vault-name "${{ vars.KEY_VAULT }}" --name snowflake-cicd-private-key \
+            --query value -o tsv > "$RUNNER_TEMP/sf_key.p8"
+          chmod 600 "$RUNNER_TEMP/sf_key.p8"
+      - name: Install SnowSQL
+        run: |
+          curl -sO https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.3/linux_x86_64/snowsql-1.3.2-linux_x86_64.bash
+          SNOWSQL_DEST=~/bin SNOWSQL_LOGIN_SHELL=~/.profile bash snowsql-1.3.2-linux_x86_64.bash
+      - name: Configure connection
+        run: |
+          mkdir -p ~/.snowsql
+          ENV_LC=$(echo "$ENV" | tr '[:upper:]' '[:lower:]')
+          cat > ~/.snowsql/config <<CFG
+          [connections.cv_${ENV_LC}]
+          accountname = ${{ vars.SNOWFLAKE_ACCOUNT }}
+          username = SVC_${ENV}_CICD
+          authenticator = SNOWFLAKE_JWT
+          private_key_path = $RUNNER_TEMP/sf_key.p8
+          CFG
+      - name: Pre-release snapshot (PROD only)
+        if: env.ENV == 'PROD'
+        run: ~/bin/snowsql -c cv_prod -o variable_substitution=true -D REL="${GITHUB_SHA::7}" -f snowflake/11_clone_timetravel/02_pre_release_snapshot.sql
+      - name: Deploy manifest
+        env:
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ADLS_ACCOUNT: ${{ vars.ADLS_ACCOUNT }}
+          PHI_SALT_REF: ${{ vars.PHI_SALT_REF }}
+        run: PATH=~/bin:$PATH snowflake/deploy/deploy.sh "$ENV" --from 04_control/01_control_tables.sql   # account objects via admin pipeline
+
+  adf:
+    needs: snowflake
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env || 'DEV' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Build ARM template (ADF utilities, no manual Publish button)
+        run: |
+          npm install -g @microsoft/azure-data-factory-utilities
+          npx @microsoft/azure-data-factory-utilities export adf \
+            "/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.ADF_RG }}/providers/Microsoft.DataFactory/factories/${{ vars.ADF_NAME }}" arm
+      - name: Stop triggers → deploy → start triggers
+        uses: azure/powershell@v2
+        with:
+          azPSVersion: latest
+          inlineScript: |
+            ./arm/PrePostDeploymentScript.Ver2.ps1 -armTemplate arm/ARMTemplateForFactory.json -ResourceGroupName ${{ vars.ADF_RG }} -DataFactoryName ${{ vars.ADF_NAME }} -predeployment $true -deleteDeployment $false
+            New-AzResourceGroupDeployment -ResourceGroupName ${{ vars.ADF_RG }} -TemplateFile arm/ARMTemplateForFactory.json -TemplateParameterFile adf/params/${{ github.event.inputs.env || 'DEV' }}.json -Mode Incremental
+            ./arm/PrePostDeploymentScript.Ver2.ps1 -armTemplate arm/ARMTemplateForFactory.json -ResourceGroupName ${{ vars.ADF_RG }} -DataFactoryName ${{ vars.ADF_NAME }} -predeployment $false -deleteDeployment $true

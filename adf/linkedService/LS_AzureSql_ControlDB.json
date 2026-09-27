@@ -1,0 +1,17 @@
+{
+    "name": "LS_AzureSql_ControlDB",
+    "properties": {
+        "type": "AzureSqlDatabase",
+        "connectVia": {
+            "referenceName": "IR_Azure_ManagedVNet",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "ADF metadata/control DB (ctl schema). Managed identity auth.",
+        "typeProperties": {
+            "server": "sql-cv-adfctl-prod.database.windows.net",
+            "database": "sqldb-cv-adfctl",
+            "encrypt": "mandatory",
+            "authenticationType": "SystemAssignedManagedIdentity"
+        }
+    }
+}

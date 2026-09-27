@@ -1,0 +1,280 @@
+{
+    "name": "PL_12_File_Ingest_SFTP",
+    "properties": {
+        "description": "PBM pharmacy file: list SFTP → for each file validate trailer row count → binary copy to raw/incremental/pbm/rx_claim → archive on SFTP.",
+        "parameters": {
+            "business_date": {
+                "type": "string"
+            }
+        },
+        "activities": [
+            {
+                "name": "Get_SFTP_File_List",
+                "type": "GetMetadata",
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_Sftp_Binary",
+                        "type": "DatasetReference"
+                    },
+                    "fieldList": [
+                        "childItems"
+                    ],
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": false,
+                        "modifiedDatetimeStart": {
+                            "value": "@addDays(utcNow(), -2)",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Filter_Data_Files",
+                "type": "Filter",
+                "dependsOn": [
+                    {
+                        "activity": "Get_SFTP_File_List",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Get_SFTP_File_List').output.childItems",
+                        "type": "Expression"
+                    },
+                    "condition": {
+                        "value": "@and(equals(item().type,'File'), startswith(item().name,'CV_RXCLM_'))",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "ForEach_File",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Filter_Data_Files",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Filter_Data_Files').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 4,
+                    "activities": [
+                        {
+                            "name": "Copy_To_Raw",
+                            "type": "Copy",
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "BinarySource",
+                                    "storeSettings": {
+                                        "type": "SftpReadSettings",
+                                        "recursive": false
+                                    }
+                                },
+                                "sink": {
+                                    "type": "BinarySink",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSWriteSettings"
+                                    }
+                                },
+                                "validateDataConsistency": true
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_Sftp_Binary",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "file_name": {
+                                            "value": "@item().name",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_ADLS_Binary",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "container": "raw",
+                                        "folder_path": {
+                                            "value": "@concat('_staging/pbm/', pipeline().parameters.business_date)",
+                                            "type": "Expression"
+                                        },
+                                        "file_name": {
+                                            "value": "@item().name",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Validate_Trailer",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Copy_To_Raw",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DelimitedTextSource",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSReadSettings"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_ADLS_DelimitedText_PBM",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "folder_path": {
+                                            "value": "@concat('_staging/pbm/', pipeline().parameters.business_date)",
+                                            "type": "Expression"
+                                        },
+                                        "file_name": {
+                                            "value": "@item().name",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "firstRowOnly": false
+                            },
+                            "description": "Trailer row 'TRL|<count>' must equal data rows. (Lookup caps at 5,000 rows; for large files the check runs in Snowflake instead — see runbook.)"
+                        },
+                        {
+                            "name": "If_Trailer_OK",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "Validate_Trailer",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@equals(int(last(activity('Validate_Trailer').output.value).Prop_1), sub(activity('Validate_Trailer').output.count, 1))",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Promote_To_Incremental",
+                                        "type": "Copy",
+                                        "policy": {
+                                            "timeout": "0.02:00:00",
+                                            "retry": 3,
+                                            "retryIntervalInSeconds": 120,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "typeProperties": {
+                                            "source": {
+                                                "type": "BinarySource",
+                                                "storeSettings": {
+                                                    "type": "AzureBlobFSReadSettings",
+                                                    "deleteFilesAfterCompletion": true
+                                                }
+                                            },
+                                            "sink": {
+                                                "type": "BinarySink",
+                                                "storeSettings": {
+                                                    "type": "AzureBlobFSWriteSettings"
+                                                }
+                                            }
+                                        },
+                                        "inputs": [
+                                            {
+                                                "referenceName": "DS_ADLS_Binary",
+                                                "type": "DatasetReference",
+                                                "parameters": {
+                                                    "container": "raw",
+                                                    "folder_path": {
+                                                        "value": "@concat('_staging/pbm/', pipeline().parameters.business_date)",
+                                                        "type": "Expression"
+                                                    },
+                                                    "file_name": {
+                                                        "value": "@item().name",
+                                                        "type": "Expression"
+                                                    }
+                                                }
+                                            }
+                                        ],
+                                        "outputs": [
+                                            {
+                                                "referenceName": "DS_ADLS_Binary",
+                                                "type": "DatasetReference",
+                                                "parameters": {
+                                                    "container": "raw",
+                                                    "folder_path": {
+                                                        "value": "@concat('incremental/pbm/rx_claim/load_date=', pipeline().parameters.business_date)",
+                                                        "type": "Expression"
+                                                    },
+                                                    "file_name": {
+                                                        "value": "@item().name",
+                                                        "type": "Expression"
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "ifFalseActivities": [
+                                    {
+                                        "name": "Fail_Trailer_Mismatch",
+                                        "type": "Fail",
+                                        "typeProperties": {
+                                            "message": {
+                                                "value": "@concat('PBM trailer count mismatch for ', item().name)",
+                                                "type": "Expression"
+                                            },
+                                            "errorCode": "422"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "folder": {
+            "name": "10_incremental"
+        }
+    }
+}

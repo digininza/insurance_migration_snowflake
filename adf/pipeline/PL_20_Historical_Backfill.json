@@ -1,0 +1,445 @@
+{
+    "name": "PL_20_Historical_Backfill",
+    "properties": {
+        "description": "Restartable historical backfill: copy PENDING/FAILED partitions of ctl.backfill_partition in parallel (DynamicRange source partitioning), then bulk COPY INTO RAW on WH_BACKFILL and build CORE history via the backfill task.",
+        "parameters": {
+            "object_id": {
+                "type": "int"
+            },
+            "wave_from_month": {
+                "type": "string"
+            },
+            "wave_to_month": {
+                "type": "string"
+            },
+            "max_partitions": {
+                "type": "int",
+                "defaultValue": 200
+            }
+        },
+        "activities": [
+            {
+                "name": "Lookup_Pending_Partitions",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": {
+                            "value": "@concat('EXEC ctl.usp_get_backfill_partitions @object_id = ', string(pipeline().parameters.object_id), ', @from_month = ''', pipeline().parameters.wave_from_month, ''', @to_month = ''', pipeline().parameters.wave_to_month, ''', @max_rows = ', string(pipeline().parameters.max_partitions))",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach_Partition",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Lookup_Pending_Partitions",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Lookup_Pending_Partitions').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 12,
+                    "activities": [
+                        {
+                            "name": "Mark_Running",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSql_ControlDB",
+                                "type": "LinkedServiceReference"
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "ctl.usp_mark_partition",
+                                "storedProcedureParameters": {
+                                    "partition_id": {
+                                        "value": {
+                                            "value": "@item().partition_id",
+                                            "type": "Expression"
+                                        },
+                                        "type": "Int64"
+                                    },
+                                    "status": {
+                                        "value": "RUNNING",
+                                        "type": "String"
+                                    },
+                                    "rows_copied": {
+                                        "value": null,
+                                        "type": "Int64"
+                                    },
+                                    "error": {
+                                        "value": null,
+                                        "type": "String"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Copy_Partition",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "Mark_Running",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "SqlServerSource",
+                                    "sqlReaderQuery": {
+                                        "value": "@concat('SELECT ', item().select_columns, ' FROM ', item().schema_name, '.', item().table_name, ' WHERE ', item().range_column, ' >= ', item().range_start, ' AND ', item().range_column, ' < ', item().range_end, ' AND ?AdfDynamicRangePartitionCondition')",
+                                        "type": "Expression"
+                                    },
+                                    "partitionOption": "DynamicRange",
+                                    "partitionSettings": {
+                                        "partitionColumnName": {
+                                            "value": "@item().partition_column",
+                                            "type": "Expression"
+                                        },
+                                        "partitionLowerBound": {
+                                            "value": "@item().id_lower",
+                                            "type": "Expression"
+                                        },
+                                        "partitionUpperBound": {
+                                            "value": "@item().id_upper",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "queryTimeout": "04:00:00"
+                                },
+                                "sink": {
+                                    "type": "ParquetSink",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSWriteSettings",
+                                        "copyBehavior": "FlattenHierarchy"
+                                    },
+                                    "formatSettings": {
+                                        "type": "ParquetWriteSettings",
+                                        "maxRowsPerFile": {
+                                            "value": "@item().max_rows_per_file",
+                                            "type": "Expression"
+                                        },
+                                        "fileNamePrefix": "part"
+                                    }
+                                },
+                                "parallelCopies": 16,
+                                "validateDataConsistency": true,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": false
+                                    }
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_SqlServer_Generic",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "schema_name": {
+                                            "value": "@item().schema_name",
+                                            "type": "Expression"
+                                        },
+                                        "table_name": {
+                                            "value": "@item().table_name",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_ADLS_Parquet",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "container": "raw",
+                                        "folder_path": {
+                                            "value": "@concat('backfill/', item().target_path, '/load_date=', item().partition_label)",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Mark_Done",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "Copy_Partition",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSql_ControlDB",
+                                "type": "LinkedServiceReference"
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "ctl.usp_mark_partition",
+                                "storedProcedureParameters": {
+                                    "partition_id": {
+                                        "value": {
+                                            "value": "@item().partition_id",
+                                            "type": "Expression"
+                                        },
+                                        "type": "Int64"
+                                    },
+                                    "status": {
+                                        "value": "DONE",
+                                        "type": "String"
+                                    },
+                                    "rows_copied": {
+                                        "value": {
+                                            "value": "@activity('Copy_Partition').output.rowsCopied",
+                                            "type": "Expression"
+                                        },
+                                        "type": "Int64"
+                                    },
+                                    "error": {
+                                        "value": null,
+                                        "type": "String"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Mark_Failed",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "Copy_Partition",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_AzureSql_ControlDB",
+                                "type": "LinkedServiceReference"
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "ctl.usp_mark_partition",
+                                "storedProcedureParameters": {
+                                    "partition_id": {
+                                        "value": {
+                                            "value": "@item().partition_id",
+                                            "type": "Expression"
+                                        },
+                                        "type": "Int64"
+                                    },
+                                    "status": {
+                                        "value": "FAILED",
+                                        "type": "String"
+                                    },
+                                    "rows_copied": {
+                                        "value": null,
+                                        "type": "Int64"
+                                    },
+                                    "error": {
+                                        "value": {
+                                            "value": "@string(activity('Copy_Partition').error.message)",
+                                            "type": "Expression"
+                                        },
+                                        "type": "String"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Check_Wave_Complete",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach_Partition",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": {
+                            "value": "@concat('SELECT COUNT(*) AS not_done FROM ctl.backfill_partition WHERE object_id = ', string(pipeline().parameters.object_id), ' AND partition_month BETWEEN ''', pipeline().parameters.wave_from_month, ''' AND ''', pipeline().parameters.wave_to_month, ''' AND status <> ''DONE''')",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "If_Wave_Complete",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Check_Wave_Complete",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@equals(activity('Check_Wave_Complete').output.firstRow.not_done, 0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Bulk_Copy_Into_Raw",
+                            "type": "Script",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_Snowflake",
+                                "type": "LinkedServiceReference"
+                            },
+                            "typeProperties": {
+                                "scripts": [
+                                    {
+                                        "type": "Query",
+                                        "text": {
+                                            "value": "@concat('USE WAREHOUSE PROD_WH_BACKFILL; CALL CV_PROD_CONTROL.CONTROL.SP_BACKFILL_COPY(''CV_PROD_RAW.CLAIMS.CLAIM_LINE'', ''backfill/claims/claim_line/'', ''.*load_date=(', replace(substring(pipeline().parameters.wave_from_month,0,4),'-',''), ').*[.]parquet'', ''', pipeline().RunId, ''', FALSE)')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                ],
+                                "scriptBlockExecutionTimeout": "02:00:00"
+                            }
+                        },
+                        {
+                            "name": "Build_Core_History",
+                            "type": "Script",
+                            "dependsOn": [
+                                {
+                                    "activity": "Bulk_Copy_Into_Raw",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "linkedServiceName": {
+                                "referenceName": "LS_Snowflake",
+                                "type": "LinkedServiceReference"
+                            },
+                            "typeProperties": {
+                                "scripts": [
+                                    {
+                                        "type": "Query",
+                                        "text": {
+                                            "value": "@concat('ALTER TASK CV_PROD_CONTROL.ORCHESTRATION.T_ROOT_BACKFILL SET CONFIG = ''{\"from_month\":\"', pipeline().parameters.wave_from_month, '\",\"to_month\":\"', pipeline().parameters.wave_to_month, '\"}''; EXECUTE TASK CV_PROD_CONTROL.ORCHESTRATION.T_ROOT_BACKFILL;')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                ],
+                                "scriptBlockExecutionTimeout": "02:00:00"
+                            }
+                        }
+                    ],
+                    "ifFalseActivities": [
+                        {
+                            "name": "Fail_Wave_Incomplete",
+                            "type": "Fail",
+                            "typeProperties": {
+                                "message": {
+                                    "value": "@concat(string(activity('Check_Wave_Complete').output.firstRow.not_done), ' partitions not DONE — re-run this pipeline; only PENDING/FAILED partitions are copied again')",
+                                    "type": "Expression"
+                                },
+                                "errorCode": "409"
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "folder": {
+            "name": "20_backfill"
+        },
+        "annotations": [
+            "restartable"
+        ]
+    }
+}

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/
+*.p8
+*.pem
+.env
+.DS_Store
+informatica_legacy/inventory/assessment.csv

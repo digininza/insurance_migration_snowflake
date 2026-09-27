@@ -1,0 +1,596 @@
+{
+    "name": "PL_11_Copy_Object_Incremental",
+    "properties": {
+        "description": "Generic watermark copy for one ctl.source_object row. New watermark is read BEFORE the copy; bounded range (old, new]; watermark saved only on success.",
+        "parameters": {
+            "object": {
+                "type": "object"
+            },
+            "business_date": {
+                "type": "string"
+            }
+        },
+        "activities": [
+            {
+                "name": "Log_Run_Start",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSql_ControlDB",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "storedProcedureName": "ctl.usp_log_run_start",
+                    "storedProcedureParameters": {
+                        "run_id": {
+                            "value": {
+                                "value": "@pipeline().RunId",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        },
+                        "object_id": {
+                            "value": {
+                                "value": "@pipeline().parameters.object.object_id",
+                                "type": "Expression"
+                            },
+                            "type": "Int32"
+                        },
+                        "business_date": {
+                            "value": {
+                                "value": "@pipeline().parameters.business_date",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Lookup_Old_Watermark",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Log_Run_Start",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": {
+                            "value": "@concat('SELECT wm_literal, last_watermark FROM ctl.vw_watermark_literal WHERE object_id = ', string(pipeline().parameters.object.object_id))",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "Switch_Source_Type",
+                "type": "Switch",
+                "dependsOn": [
+                    {
+                        "activity": "Lookup_Old_Watermark",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "on": {
+                        "value": "@pipeline().parameters.object.system_code",
+                        "type": "Expression"
+                    },
+                    "cases": [
+                        {
+                            "value": "CLAIMS",
+                            "activities": [
+                                {
+                                    "name": "Lookup_New_Watermark",
+                                    "type": "Lookup",
+                                    "policy": {
+                                        "timeout": "0.02:00:00",
+                                        "retry": 3,
+                                        "retryIntervalInSeconds": 120,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "SqlServerSource",
+                                            "sqlReaderQuery": {
+                                                "value": "@concat('SELECT CONVERT(varchar(40), CAST(MAX(', pipeline().parameters.object.watermark_column, ') AS bigint)) AS wm_literal FROM ', pipeline().parameters.object.schema_name, '.', pipeline().parameters.object.table_name)",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "dataset": {
+                                            "referenceName": "DS_SqlServer_Generic",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "schema_name": "dbo",
+                                                "table_name": "CLM_HDR"
+                                            }
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "Copy_To_ADLS",
+                                    "type": "Copy",
+                                    "dependsOn": [
+                                        {
+                                            "activity": "Lookup_New_Watermark",
+                                            "dependencyConditions": [
+                                                "Succeeded"
+                                            ]
+                                        }
+                                    ],
+                                    "policy": {
+                                        "timeout": "0.02:00:00",
+                                        "retry": 3,
+                                        "retryIntervalInSeconds": 120,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [
+                                        {
+                                            "name": "object",
+                                            "value": "@{pipeline().parameters.object.table_name}"
+                                        }
+                                    ],
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "SqlServerSource",
+                                            "queryTimeout": "02:00:00",
+                                            "sqlReaderQuery": {
+                                                "value": "@concat('SELECT ', pipeline().parameters.object.select_columns, ' FROM ', pipeline().parameters.object.schema_name, '.', pipeline().parameters.object.table_name, ' WHERE ', pipeline().parameters.object.watermark_column, ' > ', activity('Lookup_Old_Watermark').output.firstRow.wm_literal, ' AND ', pipeline().parameters.object.watermark_column, ' <= ', activity('Lookup_New_Watermark').output.firstRow.wm_literal)",
+                                                "type": "Expression"
+                                            },
+                                            "isolationLevel": "ReadCommitted",
+                                            "partitionOption": "None"
+                                        },
+                                        "sink": {
+                                            "type": "ParquetSink",
+                                            "storeSettings": {
+                                                "type": "AzureBlobFSWriteSettings"
+                                            },
+                                            "formatSettings": {
+                                                "type": "ParquetWriteSettings",
+                                                "maxRowsPerFile": {
+                                                    "value": "@pipeline().parameters.object.max_rows_per_file",
+                                                    "type": "Expression"
+                                                },
+                                                "fileNamePrefix": "part"
+                                            }
+                                        },
+                                        "enableStaging": false,
+                                        "parallelCopies": 8,
+                                        "validateDataConsistency": true,
+                                        "translator": {
+                                            "type": "TabularTranslator",
+                                            "typeConversion": true,
+                                            "typeConversionSettings": {
+                                                "allowDataTruncation": false,
+                                                "treatBooleanAsNumber": false
+                                            }
+                                        }
+                                    },
+                                    "inputs": [
+                                        {
+                                            "referenceName": "DS_SqlServer_Generic",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "schema_name": {
+                                                    "value": "@pipeline().parameters.object.schema_name",
+                                                    "type": "Expression"
+                                                },
+                                                "table_name": {
+                                                    "value": "@pipeline().parameters.object.table_name",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "referenceName": "DS_ADLS_Parquet",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "container": "raw",
+                                                "folder_path": {
+                                                    "value": "@concat('incremental/', pipeline().parameters.object.target_path, '/load_date=', pipeline().parameters.business_date, '/run_id=', pipeline().RunId)",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "value": "MEMBERSHIP",
+                            "activities": [
+                                {
+                                    "name": "Lookup_New_Watermark_Ora",
+                                    "type": "Lookup",
+                                    "policy": {
+                                        "timeout": "0.02:00:00",
+                                        "retry": 3,
+                                        "retryIntervalInSeconds": 120,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "OracleSource",
+                                            "oracleReaderQuery": {
+                                                "value": "@concat('SELECT ''TO_TIMESTAMP('''''' || TO_CHAR(MAX(', pipeline().parameters.object.watermark_column, '),''YYYY-MM-DD HH24:MI:SS.FF6'') || '''''',''''YYYY-MM-DD HH24:MI:SS.FF6'''')'' AS WM_LITERAL FROM ', pipeline().parameters.object.schema_name, '.', pipeline().parameters.object.table_name)",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "dataset": {
+                                            "referenceName": "DS_Oracle_Membership_Generic",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "schema_name": "ENRL",
+                                                "table_name": "MEMBER"
+                                            }
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "Copy_To_ADLS_Ora",
+                                    "type": "Copy",
+                                    "dependsOn": [
+                                        {
+                                            "activity": "Lookup_New_Watermark_Ora",
+                                            "dependencyConditions": [
+                                                "Succeeded"
+                                            ]
+                                        }
+                                    ],
+                                    "policy": {
+                                        "timeout": "0.02:00:00",
+                                        "retry": 3,
+                                        "retryIntervalInSeconds": 120,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "userProperties": [
+                                        {
+                                            "name": "object",
+                                            "value": "@{pipeline().parameters.object.table_name}"
+                                        }
+                                    ],
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "OracleSource",
+                                            "queryTimeout": "02:00:00",
+                                            "oracleReaderQuery": {
+                                                "value": "@concat('SELECT ', pipeline().parameters.object.select_columns, ' FROM ', pipeline().parameters.object.schema_name, '.', pipeline().parameters.object.table_name, ' WHERE ', pipeline().parameters.object.watermark_column, ' > ', activity('Lookup_Old_Watermark').output.firstRow.wm_literal, ' AND ', pipeline().parameters.object.watermark_column, ' <= ', activity('Lookup_New_Watermark').output.firstRow.wm_literal)",
+                                                "type": "Expression"
+                                            },
+                                            "partitionOption": "None"
+                                        },
+                                        "sink": {
+                                            "type": "ParquetSink",
+                                            "storeSettings": {
+                                                "type": "AzureBlobFSWriteSettings"
+                                            },
+                                            "formatSettings": {
+                                                "type": "ParquetWriteSettings",
+                                                "maxRowsPerFile": {
+                                                    "value": "@pipeline().parameters.object.max_rows_per_file",
+                                                    "type": "Expression"
+                                                },
+                                                "fileNamePrefix": "part"
+                                            }
+                                        },
+                                        "enableStaging": false,
+                                        "parallelCopies": 8,
+                                        "validateDataConsistency": true,
+                                        "translator": {
+                                            "type": "TabularTranslator",
+                                            "typeConversion": true,
+                                            "typeConversionSettings": {
+                                                "allowDataTruncation": false,
+                                                "treatBooleanAsNumber": false
+                                            }
+                                        }
+                                    },
+                                    "inputs": [
+                                        {
+                                            "referenceName": "DS_Oracle_Membership_Generic",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "schema_name": {
+                                                    "value": "@pipeline().parameters.object.schema_name",
+                                                    "type": "Expression"
+                                                },
+                                                "table_name": {
+                                                    "value": "@pipeline().parameters.object.table_name",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "referenceName": "DS_ADLS_Parquet",
+                                            "type": "DatasetReference",
+                                            "parameters": {
+                                                "container": "raw",
+                                                "folder_path": {
+                                                    "value": "@concat('incremental/', pipeline().parameters.object.target_path, '/load_date=', pipeline().parameters.business_date, '/run_id=', pipeline().RunId)",
+                                                    "type": "Expression"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                    "defaultActivities": [
+                        {
+                            "name": "Fail_Unknown_System",
+                            "type": "Fail",
+                            "typeProperties": {
+                                "message": {
+                                    "value": "@concat('No copy branch for system ', pipeline().parameters.object.system_code)",
+                                    "type": "Expression"
+                                },
+                                "errorCode": "400"
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Update_Watermark",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "Switch_Source_Type",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSql_ControlDB",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "storedProcedureName": "ctl.usp_update_watermark",
+                    "storedProcedureParameters": {
+                        "object_id": {
+                            "value": {
+                                "value": "@pipeline().parameters.object.object_id",
+                                "type": "Expression"
+                            },
+                            "type": "Int32"
+                        },
+                        "new_watermark": {
+                            "value": {
+                                "value": "@coalesce(activity('Lookup_New_Watermark')?.output?.firstRow?.wm_literal, activity('Lookup_New_Watermark_Ora')?.output?.firstRow?.WM_LITERAL)",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        },
+                        "run_id": {
+                            "value": {
+                                "value": "@pipeline().RunId",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Log_Run_Success",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "Update_Watermark",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSql_ControlDB",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "storedProcedureName": "ctl.usp_log_run_end",
+                    "storedProcedureParameters": {
+                        "run_id": {
+                            "value": {
+                                "value": "@pipeline().RunId",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        },
+                        "object_id": {
+                            "value": {
+                                "value": "@pipeline().parameters.object.object_id",
+                                "type": "Expression"
+                            },
+                            "type": "Int32"
+                        },
+                        "status": {
+                            "value": "SUCCEEDED",
+                            "type": "String"
+                        },
+                        "error_message": {
+                            "value": null,
+                            "type": "String"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Push_Run_To_Snowflake",
+                "type": "Script",
+                "dependsOn": [
+                    {
+                        "activity": "Log_Run_Success",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_Snowflake",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "scripts": [
+                        {
+                            "type": "Query",
+                            "text": {
+                                "value": "@concat('CALL CV_PROD_CONTROL.CONTROL.SP_ADF_LOG_RUN(PARSE_JSON(''', string(json(concat('{\"adf_run_id\":\"', pipeline().RunId, '\",\"pipeline_name\":\"', pipeline().Pipeline, '\",\"object_id\":', string(pipeline().parameters.object.object_id), ',\"source_object\":\"', pipeline().parameters.object.table_name, '\",\"feed_code\":\"', pipeline().parameters.object.feed_code, '\",\"business_date\":\"', pipeline().parameters.business_date, '\",\"status\":\"SUCCEEDED\"}'))), '''))')",
+                                "type": "Expression"
+                            }
+                        }
+                    ],
+                    "scriptBlockExecutionTimeout": "02:00:00"
+                }
+            },
+            {
+                "name": "Log_Run_Failure",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                    {
+                        "activity": "Switch_Source_Type",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_AzureSql_ControlDB",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "storedProcedureName": "ctl.usp_log_run_end",
+                    "storedProcedureParameters": {
+                        "run_id": {
+                            "value": {
+                                "value": "@pipeline().RunId",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        },
+                        "object_id": {
+                            "value": {
+                                "value": "@pipeline().parameters.object.object_id",
+                                "type": "Expression"
+                            },
+                            "type": "Int32"
+                        },
+                        "status": {
+                            "value": "FAILED",
+                            "type": "String"
+                        },
+                        "error_message": {
+                            "value": {
+                                "value": "@string(activity('Switch_Source_Type').error)",
+                                "type": "Expression"
+                            },
+                            "type": "String"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Alert_Object_Failed",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Log_Run_Failure",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_90_Send_Alert",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "severity": "High",
+                        "pipeline_name": {
+                            "value": "@pipeline().Pipeline",
+                            "type": "Expression"
+                        },
+                        "run_id": {
+                            "value": "@pipeline().RunId",
+                            "type": "Expression"
+                        },
+                        "message": {
+                            "value": "@concat('Extract failed: ', pipeline().parameters.object.system_code, '.', pipeline().parameters.object.table_name, ' (criticality ', pipeline().parameters.object.criticality, ')')",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            }
+        ],
+        "folder": {
+            "name": "10_incremental"
+        }
+    }
+}

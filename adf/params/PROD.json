@@ -1,0 +1,15 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "factoryName": { "value": "adf-cv-dataplatform-prod" },
+        "LS_KeyVault_properties_typeProperties_baseUrl": { "value": "https://kv-cv-data-prod.vault.azure.net/" },
+        "LS_ADLS_Gen2_properties_typeProperties_url": { "value": "https://stcvlakeprod.dfs.core.windows.net/" },
+        "LS_Snowflake_properties_typeProperties_accountIdentifier": { "value": "carevista-prod.privatelink" },
+        "LS_Snowflake_properties_typeProperties_database": { "value": "CV_PROD_CONTROL" },
+        "LS_Snowflake_properties_typeProperties_warehouse": { "value": "PROD_WH_INGEST" },
+        "LS_Snowflake_properties_typeProperties_role": { "value": "PROD_SR_INGEST" },
+        "LS_Snowflake_properties_typeProperties_user": { "value": "SVC_PROD_ADF_LOADER" },
+        "default_properties_gp_env_value": { "value": "PROD" }
+    }
+}

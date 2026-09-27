@@ -1,0 +1,270 @@
+{
+    "name": "PL_00_Master_Orchestrator",
+    "properties": {
+        "description": "Daily orchestration: incremental extract per source system (parallel) → SFTP → wait for Snowflake publish gate → reconciliation → alerts.",
+        "parameters": {
+            "business_date": {
+                "type": "string",
+                "defaultValue": ""
+            },
+            "max_parallel_systems": {
+                "type": "int",
+                "defaultValue": 4
+            }
+        },
+        "variables": {
+            "v_business_date": {
+                "type": "String"
+            }
+        },
+        "activities": [
+            {
+                "name": "Set_Business_Date",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "typeProperties": {
+                    "variableName": "v_business_date",
+                    "value": {
+                        "value": "@if(empty(pipeline().parameters.business_date), formatDateTime(addDays(convertFromUtc(utcNow(),'Eastern Standard Time'),-1),'yyyy-MM-dd'), pipeline().parameters.business_date)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Lookup_Active_Systems",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Set_Business_Date",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": "SELECT system_code, max_parallel_copies FROM ctl.source_system WHERE is_active = 1 AND system_code <> 'PBM' ORDER BY priority",
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach_System",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Lookup_Active_Systems",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Lookup_Active_Systems').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 4,
+                    "activities": [
+                        {
+                            "name": "Run_System_Incremental",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_10_Incremental_By_System",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "system_code": {
+                                        "value": "@item().system_code",
+                                        "type": "Expression"
+                                    },
+                                    "business_date": {
+                                        "value": "@variables('v_business_date')",
+                                        "type": "Expression"
+                                    },
+                                    "batch_count": {
+                                        "value": "@item().max_parallel_copies",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Run_PBM_File_Ingest",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Set_Business_Date",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_12_File_Ingest_SFTP",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "business_date": {
+                            "value": "@variables('v_business_date')",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Wait_Publish_Gate",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach_System",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    },
+                    {
+                        "activity": "Run_PBM_File_Ingest",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_30_Snowflake_Post_Load",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "business_date": {
+                            "value": "@variables('v_business_date')",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Run_Reconciliation",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Wait_Publish_Gate",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_40_Reconciliation",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "business_date": {
+                            "value": "@variables('v_business_date')",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Alert_Gate_Failed",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Wait_Publish_Gate",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_90_Send_Alert",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "severity": "High",
+                        "pipeline_name": {
+                            "value": "@pipeline().Pipeline",
+                            "type": "Expression"
+                        },
+                        "run_id": {
+                            "value": "@pipeline().RunId",
+                            "type": "Expression"
+                        },
+                        "message": {
+                            "value": "@concat('Publish gate not PASSED for ', variables('v_business_date'))",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Alert_Recon_Failed",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Run_Reconciliation",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_90_Send_Alert",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "severity": "High",
+                        "pipeline_name": {
+                            "value": "@pipeline().Pipeline",
+                            "type": "Expression"
+                        },
+                        "run_id": {
+                            "value": "@pipeline().RunId",
+                            "type": "Expression"
+                        },
+                        "message": {
+                            "value": "@concat('Critical reconciliation breaks for ', variables('v_business_date'))",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            }
+        ],
+        "folder": {
+            "name": "00_orchestration"
+        },
+        "annotations": [
+            "daily",
+            "critical"
+        ]
+    }
+}

@@ -1,0 +1,28 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check src tests
+      - name: ADF factory validation (references, no inline secrets, pipe coverage)
+        run: python -m src.tools.adf_validate
+      - name: Snowflake SQL lint + manifest completeness
+        run: python -m src.tools.sql_manifest
+      - name: Unit tests
+        run: pytest
+      - name: Assessment + reconciliation smoke run
+        run: |
+          python -m src.tools.informatica_inventory --out /tmp/assessment.csv
+          python -m src.datagen.generate --out /tmp/data --members 500 --claims 2000
+          python -m src.recon.reconcile --data /tmp/data --report /tmp/data/recon_report.md
+          cat /tmp/data/recon_report.md >> "$GITHUB_STEP_SUMMARY"

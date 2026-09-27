@@ -1,0 +1,37 @@
+{
+    "name": "TR_Claims_Hourly_TW",
+    "properties": {
+        "type": "TumblingWindowTrigger",
+        "runtimeState": "Started",
+        "description": "Intraday claims increments for ops dashboards. Tumbling window: no overlap, retries, backfillable windows, self-dependency.",
+        "pipeline": {
+            "pipelineReference": {
+                "referenceName": "PL_10_Incremental_By_System",
+                "type": "PipelineReference"
+            },
+            "parameters": {
+                "system_code": "CLAIMS",
+                "business_date": "@formatDateTime(trigger().outputs.windowStartTime,'yyyy-MM-dd')",
+                "batch_count": 8
+            }
+        },
+        "typeProperties": {
+            "frequency": "Hour",
+            "interval": 1,
+            "startTime": "2026-06-14T06:00:00Z",
+            "delay": "00:10:00",
+            "maxConcurrency": 1,
+            "retryPolicy": {
+                "count": 2,
+                "intervalInSeconds": 300
+            },
+            "dependsOn": [
+                {
+                    "type": "SelfDependencyTumblingWindowTriggerReference",
+                    "offset": "-01:00:00",
+                    "size": "01:00:00"
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,71 @@
+# Deploy order for one environment. Lines = paths relative to snowflake/.
+# `manual:` lines are runbook scripts that must NOT run in CI (checked by src/tools/sql_manifest.py:
+# every .sql file under snowflake/ must appear here exactly once, either as deploy or manual).
+
+# --- account level (ACCOUNTADMIN / SECURITYADMIN, first time + on change)
+00_account/01_roles.sql
+00_account/02_warehouses.sql
+00_account/03_resource_monitors.sql
+02_databases/01_databases_schemas.sql
+02_databases/02_access_role_grants.sql
+00_account/04_network_policy_users.sql
+01_integration/01_storage_integration.sql
+01_integration/02_notification_integration.sql
+01_integration/03_file_formats_stages.sql
+
+# --- control plane
+04_control/01_control_tables.sql
+04_control/02_logging_procs.sql
+04_control/03_dq_rules_seed.sql
+
+# --- RAW
+03_raw/01_raw_tables.sql
+03_raw/02_pipes.sql
+03_raw/03_backfill_copy_proc.sql
+
+# --- STAGE + CORE
+05_staging/01_stage_tables.sql
+06_core/01_sequences_dims.sql
+06_core/02_facts.sql
+07_streams_tasks/01_streams.sql
+05_staging/02_sp_stage_claim_line.sql
+05_staging/03_sp_stage_member_eligibility.sql
+05_staging/04_sp_replay_orphan_lines.sql
+06_core/03_sp_merge_claim_header.sql
+06_core/04_sp_merge_dim_member_scd2.sql
+06_core/05_sp_merge_fact_claim_line.sql
+06_core/06_sp_merge_fact_eligibility_month.sql
+06_core/07_sp_merge_dim_provider_scd2.sql
+
+# --- MART
+08_marts/01_dynamic_tables.sql
+08_marts/02_secure_views.sql
+08_marts/03_legacy_compat_views.sql
+
+# --- governance (after the objects it protects exist)
+09_governance/01_tags.sql
+09_governance/02_masking_policies.sql
+09_governance/03_row_access_policy.sql
+09_governance/04_apply_tags.sql
+
+# --- reconciliation
+10_reconciliation/01_recon_tables.sql
+10_reconciliation/02_recon_rules_seed.sql
+10_reconciliation/03_sp_run_recon.sql
+
+# --- orchestration last (tasks reference every proc above)
+07_streams_tasks/02_sp_publish_gate.sql
+07_streams_tasks/03_task_dag.sql
+07_streams_tasks/04_backfill_dag.sql
+07_streams_tasks/05_month_end_scaling.sql
+
+# --- monitoring
+12_monitoring/01_monitoring_views.sql
+12_monitoring/02_alerts.sql
+
+# --- runbook scripts (never auto-deployed)
+manual: 11_clone_timetravel/01_qa_refresh_from_prod_replica.sql
+manual: 11_clone_timetravel/02_pre_release_snapshot.sql
+manual: 11_clone_timetravel/03_backfill_swap.sql
+manual: 11_clone_timetravel/04_parallel_run_freeze.sql
+manual: 11_clone_timetravel/05_time_travel_recovery.sql

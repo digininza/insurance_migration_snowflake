@@ -1,0 +1,21 @@
+{
+    "name": "IR_Azure_ManagedVNet",
+    "properties": {
+        "type": "Managed",
+        "description": "Azure IR in Managed VNet with managed private endpoints to ADLS, Key Vault, Azure SQL and Snowflake Private Link.",
+        "typeProperties": {
+            "computeProperties": {
+                "location": "East US 2",
+                "dataFlowProperties": {
+                    "computeType": "General",
+                    "coreCount": 8,
+                    "timeToLive": 0
+                }
+            }
+        },
+        "managedVirtualNetwork": {
+            "type": "ManagedVirtualNetworkReference",
+            "referenceName": "default"
+        }
+    }
+}

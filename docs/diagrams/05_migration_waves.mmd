@@ -1,0 +1,18 @@
+gantt
+  title CareVista migration waves (illustrative)
+  dateFormat YYYY-MM-DD
+  section Assess
+  Inventory + PoC                    :a1, 2025-07-01, 60d
+  section Wave 0
+  Foundation (landing zone, RBAC, CI) :f1, 2025-09-01, 50d
+  section Waves
+  W1 reference + provider            :w1, 2025-10-20, 35d
+  W2 membership + eligibility        :w2, after w1, 45d
+  W3 claims + 48TB backfill          :w3, after w2, 75d
+  W4 premium + MLR                   :w4, after w3, 40d
+  W5 pharmacy + regulatory           :w5, after w4, 35d
+  section Prove and cut over
+  Parallel run + daily recon         :p1, 2026-03-01, 100d
+  Cutover weekend                    :milestone, c1, 2026-06-13, 0d
+  Hypercare                          :h1, 2026-06-15, 30d
+  Decommission                       :d1, after h1, 60d

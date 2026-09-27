@@ -1,0 +1,36 @@
+{
+    "name": "DS_ADLS_DelimitedText_PBM",
+    "properties": {
+        "type": "DelimitedText",
+        "linkedServiceName": {
+            "referenceName": "LS_ADLS_Gen2",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "folder_path": {
+                "type": "string"
+            },
+            "file_name": {
+                "type": "string"
+            }
+        },
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": "raw",
+                "folderPath": {
+                    "value": "@dataset().folder_path",
+                    "type": "Expression"
+                },
+                "fileName": {
+                    "value": "@dataset().file_name",
+                    "type": "Expression"
+                }
+            },
+            "columnDelimiter": "|",
+            "firstRowAsHeader": true,
+            "quoteChar": "\"",
+            "encodingName": "UTF-8"
+        }
+    }
+}

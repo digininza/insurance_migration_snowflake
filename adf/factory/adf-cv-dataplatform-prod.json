@@ -1,0 +1,32 @@
+{
+    "name": "adf-cv-dataplatform-prod",
+    "location": "eastus2",
+    "identity": {
+        "type": "SystemAssigned"
+    },
+    "properties": {
+        "publicNetworkAccess": "Disabled",
+        "repoConfiguration": {
+            "type": "FactoryGitHubConfiguration",
+            "accountName": "carevista",
+            "repositoryName": "insurance_migration_snowflake",
+            "collaborationBranch": "main",
+            "rootFolder": "/adf"
+        },
+        "globalParameters": {
+            "gp_env": {
+                "type": "String",
+                "value": "PROD"
+            },
+            "gp_adls_account": {
+                "type": "String",
+                "value": "stcvlakeprod"
+            },
+            "gp_alert_logicapp_url_secret": {
+                "type": "String",
+                "value": "logicapp-alert-url"
+            }
+        }
+    },
+    "_comment": "Managed identity is granted: ADLS Storage Blob Data Contributor, Key Vault Secrets User, Azure SQL db_datareader/db_datawriter/EXECUTE on ctl."
+}

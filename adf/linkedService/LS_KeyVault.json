@@ -1,0 +1,10 @@
+{
+    "name": "LS_KeyVault",
+    "properties": {
+        "type": "AzureKeyVault",
+        "description": "kv-cv-data-prod. ADF managed identity has 'Key Vault Secrets User'. Every other linked service pulls secrets from here.",
+        "typeProperties": {
+            "baseUrl": "https://kv-cv-data-prod.vault.azure.net/"
+        }
+    }
+}

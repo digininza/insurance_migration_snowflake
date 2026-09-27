@@ -1,0 +1,117 @@
+{
+    "name": "PL_40_Reconciliation",
+    "properties": {
+        "description": "Legacy extract (parallel-run period only) → Snowflake SP_RUN_RECON on WH_RECON → fail on critical breaks.",
+        "parameters": {
+            "business_date": {
+                "type": "string"
+            },
+            "parallel_run_active": {
+                "type": "bool",
+                "defaultValue": true
+            }
+        },
+        "activities": [
+            {
+                "name": "If_Parallel_Run",
+                "type": "IfCondition",
+                "typeProperties": {
+                    "expression": {
+                        "value": "@pipeline().parameters.parallel_run_active",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Extract_Legacy_Metrics",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_41_Legacy_Recon_Extract",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "business_date": {
+                                        "value": "@pipeline().parameters.business_date",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Run_Recon",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "If_Parallel_Run",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:30:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "SnowflakeV2Source",
+                        "query": {
+                            "value": "@concat('CALL CV_PROD_CONTROL.RECON.SP_RUN_RECON(''', pipeline().parameters.business_date, ''')')",
+                            "type": "Expression"
+                        },
+                        "exportSettings": {
+                            "type": "SnowflakeExportCopyCommand"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_Snowflake_Generic",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "If_Critical_Breaks",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Run_Recon",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(int(json(activity('Run_Recon').output.firstRow.SP_RUN_RECON).critical_breaks), 0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Fail_Recon",
+                            "type": "Fail",
+                            "typeProperties": {
+                                "message": {
+                                    "value": "@concat('Reconciliation RED: ', activity('Run_Recon').output.firstRow.SP_RUN_RECON)",
+                                    "type": "Expression"
+                                },
+                                "errorCode": "500"
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "folder": {
+            "name": "40_recon"
+        }
+    }
+}

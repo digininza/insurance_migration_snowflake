@@ -1,0 +1,38 @@
+%% High-level design: legacy vs target
+flowchart LR
+  subgraph SRC["Source systems (on-prem)"]
+    S1[(Claims - SQL Server)]
+    S2[(Membership - Oracle)]
+    S3[(Provider - SQL Server)]
+    S4[(Billing - Oracle)]
+    S5[/PBM pharmacy files - SFTP/]
+    S6[/Code sets ICD CPT NDC/]
+  end
+  subgraph LEG["Legacy - decommissioned"]
+    PC[Informatica PowerCenter<br/>420 workflows ETL] --> EDW[(Oracle EDW)] --> COG[Cognos + extracts]
+  end
+  SRC -.legacy path.-> PC
+  subgraph AZ["Azure"]
+    SHIR[Self-hosted IR] --> ADF[ADF metadata-driven<br/>backfill + incremental]
+    CTL[(Azure SQL<br/>ctl metadata)] <--> ADF
+    KV[[Key Vault]] -.secrets.-> ADF
+    ADF --> ADLS[(ADLS Gen2<br/>raw Parquet)]
+    ADLS --> EG[Event Grid] --> Q[Storage Queue]
+    MON[Azure Monitor / Log Analytics] -.-> ADF
+    LA[Logic Apps alerts] -.-> ADF
+  end
+  SRC --> SHIR
+  subgraph SF["Snowflake Business Critical"]
+    PIPE[Snowpipe auto-ingest] --> RAW[(RAW)]
+    COPY[Bulk COPY - WH_BACKFILL] --> RAW
+    RAW -->|Streams + Tasks + SPs| STG[(STAGE transient)] --> CORE[(CORE star<br/>SCD2 dims + facts)]
+    CORE -->|Dynamic Tables| MART[(MART)]
+    MART --> COMPAT[LEGACY_COMPAT views]
+    CTRL[(CONTROL audit DQ recon)]
+  end
+  Q --> PIPE
+  ADLS --> COPY
+  MART --> PBI[Power BI]
+  COMPAT --> COG2[Cognos + extracts - repointed]
+  EDW -.recon extracts.-> ADLS
+  KV -.CMK Tri-Secret.-> SF

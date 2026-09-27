@@ -1,0 +1,30 @@
+{
+    "name": "DS_Snowflake_Generic",
+    "properties": {
+        "type": "SnowflakeV2Table",
+        "linkedServiceName": {
+            "referenceName": "LS_Snowflake",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "schema_name": {
+                "type": "string",
+                "defaultValue": "CONTROL"
+            },
+            "table_name": {
+                "type": "string",
+                "defaultValue": "CTL_FEED"
+            }
+        },
+        "typeProperties": {
+            "schema": {
+                "value": "@dataset().schema_name",
+                "type": "Expression"
+            },
+            "table": {
+                "value": "@dataset().table_name",
+                "type": "Expression"
+            }
+        }
+    }
+}

@@ -1,0 +1,28 @@
+{
+    "name": "DS_SqlServer_Provider_Generic",
+    "properties": {
+        "type": "SqlServerTable",
+        "linkedServiceName": {
+            "referenceName": "LS_SqlServer_Provider",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "schema_name": {
+                "type": "string"
+            },
+            "table_name": {
+                "type": "string"
+            }
+        },
+        "typeProperties": {
+            "schema": {
+                "value": "@dataset().schema_name",
+                "type": "Expression"
+            },
+            "table": {
+                "value": "@dataset().table_name",
+                "type": "Expression"
+            }
+        }
+    }
+}

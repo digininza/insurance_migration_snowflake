@@ -1,0 +1,30 @@
+{
+    "name": "DS_Oracle_Membership_Generic",
+    "properties": {
+        "type": "OracleTable",
+        "linkedServiceName": {
+            "referenceName": "LS_Oracle_Membership",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "schema_name": {
+                "type": "string",
+                "defaultValue": ""
+            },
+            "table_name": {
+                "type": "string",
+                "defaultValue": ""
+            }
+        },
+        "typeProperties": {
+            "schema": {
+                "value": "@dataset().schema_name",
+                "type": "Expression"
+            },
+            "table": {
+                "value": "@dataset().table_name",
+                "type": "Expression"
+            }
+        }
+    }
+}

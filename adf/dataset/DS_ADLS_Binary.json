@@ -1,0 +1,39 @@
+{
+    "name": "DS_ADLS_Binary",
+    "properties": {
+        "type": "Binary",
+        "linkedServiceName": {
+            "referenceName": "LS_ADLS_Gen2",
+            "type": "LinkedServiceReference"
+        },
+        "parameters": {
+            "container": {
+                "type": "string"
+            },
+            "folder_path": {
+                "type": "string"
+            },
+            "file_name": {
+                "type": "string",
+                "defaultValue": ""
+            }
+        },
+        "typeProperties": {
+            "location": {
+                "type": "AzureBlobFSLocation",
+                "fileSystem": {
+                    "value": "@dataset().container",
+                    "type": "Expression"
+                },
+                "folderPath": {
+                    "value": "@dataset().folder_path",
+                    "type": "Expression"
+                },
+                "fileName": {
+                    "value": "@dataset().file_name",
+                    "type": "Expression"
+                }
+            }
+        }
+    }
+}

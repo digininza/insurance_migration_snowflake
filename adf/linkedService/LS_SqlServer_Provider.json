@@ -1,0 +1,28 @@
+{
+    "name": "LS_SqlServer_Provider",
+    "properties": {
+        "type": "SqlServer",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Provider data management",
+        "typeProperties": {
+            "server": "provsql01.carevista.local",
+            "database": "PROVIDER_PROD",
+            "encrypt": "mandatory",
+            "trustServerCertificate": false,
+            "authenticationType": "SQL",
+            "userName": "svc_adf_reader",
+            "password": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "sqlsrv-provider-svc-adf-pwd"
+            },
+            "applicationIntent": "ReadOnly"
+        }
+    }
+}

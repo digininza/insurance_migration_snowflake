@@ -1,0 +1,27 @@
+{
+    "name": "LS_Oracle_Membership",
+    "properties": {
+        "type": "Oracle",
+        "connectVia": {
+            "referenceName": "IR_SelfHosted_OnPrem",
+            "type": "IntegrationRuntimeReference"
+        },
+        "description": "Enrollment/eligibility (Oracle)",
+        "typeProperties": {
+            "server": "enrlora-scan.carevista.local",
+            "port": 1521,
+            "serviceName": "ENRLPRD",
+            "authenticationType": "Basic",
+            "username": "SVC_ADF_READER",
+            "password": {
+                "type": "AzureKeyVaultSecret",
+                "store": {
+                    "referenceName": "LS_KeyVault",
+                    "type": "LinkedServiceReference"
+                },
+                "secretName": "oracle-enrollment-svc-adf-pwd"
+            },
+            "encryptionClient": "required"
+        }
+    }
+}

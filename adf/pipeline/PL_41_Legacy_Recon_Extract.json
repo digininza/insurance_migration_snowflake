@@ -1,0 +1,148 @@
+{
+    "name": "PL_41_Legacy_Recon_Extract",
+    "properties": {
+        "description": "Runs aggregate + key-hash queries IN ORACLE (pushed down) for the legacy EDW and lands small Parquet files in recon/legacy/<date>/, then COPY into LEGACY_METRIC.",
+        "parameters": {
+            "business_date": {
+                "type": "string"
+            }
+        },
+        "activities": [
+            {
+                "name": "Lookup_Legacy_Queries",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": {
+                            "value": "@concat('SELECT rule_id, legacy_sql FROM ctl.recon_legacy_query WHERE is_active = 1')",
+                            "type": "Expression"
+                        },
+                        "queryTimeout": "00:10:00"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_AzureSql_Control",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach_Legacy_Query",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Lookup_Legacy_Queries",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Lookup_Legacy_Queries').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "batchCount": 6,
+                    "activities": [
+                        {
+                            "name": "Copy_Legacy_Metric",
+                            "type": "Copy",
+                            "policy": {
+                                "timeout": "0.02:00:00",
+                                "retry": 3,
+                                "retryIntervalInSeconds": 120,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "OracleSource",
+                                    "oracleReaderQuery": {
+                                        "value": "@replace(item().legacy_sql, ':BD', concat('DATE ''', pipeline().parameters.business_date, ''''))",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "ParquetSink",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSWriteSettings"
+                                    },
+                                    "formatSettings": {
+                                        "type": "ParquetWriteSettings"
+                                    }
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_Oracle_LegacyEDW_Query",
+                                    "type": "DatasetReference"
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_ADLS_Parquet",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "container": "recon",
+                                        "folder_path": {
+                                            "value": "@concat('legacy/', pipeline().parameters.business_date, '/', item().rule_id)",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Load_Legacy_Metrics",
+                "type": "Script",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach_Legacy_Query",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.02:00:00",
+                    "retry": 3,
+                    "retryIntervalInSeconds": 120,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "linkedServiceName": {
+                    "referenceName": "LS_Snowflake",
+                    "type": "LinkedServiceReference"
+                },
+                "typeProperties": {
+                    "scripts": [
+                        {
+                            "type": "Query",
+                            "text": {
+                                "value": "@concat('COPY INTO CV_PROD_CONTROL.RECON.LEGACY_METRIC FROM @CV_PROD_RAW.LANDING.STG_ADLS_RECON/legacy/', pipeline().parameters.business_date, '/ MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE INCLUDE_METADATA = (_FILE_NAME = METADATA$FILENAME, _LOAD_TS = METADATA$START_SCAN_TIME)')",
+                                "type": "Expression"
+                            }
+                        }
+                    ],
+                    "scriptBlockExecutionTimeout": "02:00:00"
+                }
+            }
+        ],
+        "folder": {
+            "name": "40_recon"
+        }
+    }
+}

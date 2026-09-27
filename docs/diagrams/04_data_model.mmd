@@ -1,0 +1,17 @@
+%% CORE star schema
+erDiagram
+  DIM_DATE ||--o{ FACT_CLAIM_LINE : "service/paid/received date"
+  DIM_MEMBER ||--o{ FACT_CLAIM_LINE : member_sk
+  DIM_PROVIDER ||--o{ FACT_CLAIM_LINE : "rendering/billing provider"
+  DIM_PLAN ||--o{ FACT_CLAIM_LINE : plan_sk
+  DIM_LOB ||--o{ FACT_CLAIM_LINE : lob_sk
+  DIM_DIAGNOSIS ||--o{ FACT_CLAIM_DIAGNOSIS : dx_sk
+  FACT_CLAIM_LINE ||--o{ FACT_CLAIM_DIAGNOSIS : claim_id
+  DIM_PROCEDURE ||--o{ FACT_CLAIM_LINE : procedure_sk
+  DIM_MEMBER ||--o{ FACT_ELIGIBILITY_MONTH : member_sk
+  DIM_PLAN ||--o{ FACT_ELIGIBILITY_MONTH : plan_sk
+  DIM_GROUP ||--o{ FACT_PREMIUM_INVOICE : group_sk
+  DIM_GROUP ||--o{ FACT_PREMIUM_PAYMENT : group_sk
+  DIM_MEMBER ||--o{ FACT_PHARMACY_CLAIM : member_sk
+  DIM_DRUG ||--o{ FACT_PHARMACY_CLAIM : drug_sk
+  DIM_GROUP ||--o{ DIM_MEMBER : group_sk
